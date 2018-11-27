@@ -1,0 +1,54 @@
+# Travis-CI file to run an example in esp-idf
+
+dist: bionic
+language: c
+
+# before_install follows the instructions in Espressif's Getting Started ESP-IDF guide.
+# It does install the python dependenecies using pip because the Ubuntu packages don't do the right
+# thing.
+before_install:
+  - sudo apt-get install gcc git wget make libncurses-dev flex bison gperf python python-pip python-setuptools python-serial python-cryptography python-future python-pyparsing
+  - python -m pip install --user -r ./requirements.txt
+  - echo HOME=$HOME PWD=`pwd`
+  - curl -L https://dl.espressif.com/dl/xtensa-esp32-elf-linux64-1.22.0-80-g6c4433a-5.2.0.tar.gz | tar -C $HOME -xzf -
+  - export PATH=$PATH:$HOME/xtensa-esp32-elf/bin
+  - xtensa-esp32-elf-gcc --version
+
+# make the after_script conditional on actually having an S3 target specified in the travis console
+stages:
+  - name: after_script
+    if: env(S3_BUCKET) IS present AND env(AWS_ACCESS_KEY_ID) IS present
+
+# upload to an S3 bucket, requires S3_BUCKET, AWS_ACCESS_KEY_ID and AWS_SECRET_KEY to be set
+# in environment using travis' repository settings
+#- "if [[ -n \"$S3_BUCKET\" && -n \"$AWS_ACCESS_KEY_ID\" ]]; then
+after_script:
+  - echo Uploading to $S3_BUCKET
+  - cd /tmp
+  - ls -c $IDF_PATH/examples/wifi/power_save/build/power_save*
+  - tar -zcf esp-idf-power_save-$TRAVIS_BRANCH-$TRAVIS_BUILD_NUMBER.tgz
+    -C $IDF_PATH/examples/wifi/power_save/build flash.cmd
+    power_save.elf power_save.bin power_save.map partitions_singleapp.bin bootloader/bootloader.bin
+  - tar -C $IDF_PATH -zcf esp-idf-$TRAVIS_BRANCH-$TRAVIS_BUILD_NUMBER.tgz .
+  - curl -Ls https://github.com/rlmcpherson/s3gof3r/releases/download/v0.5.0/gof3r_0.5.0_linux_amd64.tar.gz
+    | tar zxf - gof3r_0.5.0_linux_amd64/gof3r
+  - mv gof3r*/gof3r .
+  - ls esp-idf-*.tgz | xargs -I {} ./gof3r put -b $S3_BUCKET -k esp-idf/{} --acl public-read -p {}
+  - ls esp-idf-*.tgz | xargs -I {} echo URL: http://$S3_BUCKET/esp-idf/{}
+
+compiler: gcc
+
+script:
+  - export IDF_PATH=`pwd`
+  - echo HOME=$HOME PWD=`pwd`
+  - cd examples/wifi/power_save
+  - make defconfig
+  - sed -i -e 's/CONFIG_WIFI_SSID="myssid"/CONFIG_WIFI_SSID="test"/'
+           -e 's/CONFIG_WIFI_PASSWORD="mypassword"/CONFIG_WIFI_PASSWORD=""/'
+           sdkconfig
+  - make all
+  - make print_flash_cmd >build/flash.cmd
+  - ls -ls build/*.elf
+
+notifications:
+  email: false
