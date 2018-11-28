@@ -34,7 +34,8 @@ after_script:
     | tar zxf - gof3r_0.5.0_linux_amd64/gof3r
   - mv gof3r*/gof3r .
   - ls esp-idf-*.tgz | xargs -I {} ./gof3r put -b $S3_BUCKET -k esp-idf/{} --acl public-read -p {}
-  - ls esp-idf-*.tgz | xargs -I {} echo URL: http://$S3_BUCKET/esp-idf/{}
+  - ls -ls esp-idf-*.tgz
+  - ls esp-idf-*.tgz | xargs -I {} echo http://$S3_BUCKET/esp-idf/{}
 
 compiler: gcc
 
@@ -45,6 +46,7 @@ script:
   - make defconfig
   - sed -i -e 's/CONFIG_WIFI_SSID="myssid"/CONFIG_WIFI_SSID="test"/'
            -e 's/CONFIG_WIFI_PASSWORD="mypassword"/CONFIG_WIFI_PASSWORD=""/'
+           -e 's/CONFIG_ESP32_DEEP_SLEEP_WAKEUP_DELAY=2000/CONFIG_ESP32_DEEP_SLEEP_WAKEUP_DELAY=5000/'
            sdkconfig
   - make all
   - make print_flash_cmd >build/flash.cmd
